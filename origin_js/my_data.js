@@ -1283,7 +1283,7 @@
       // Female T scale
       [30, 34, 38, 42, 46, 50, 54, 58, 62, 66, 70, 74, 78, 82, 86, 90, 94, 98, 102, 106, 110, 114, 118, 120]
     ], [
-      ["TRIN", "True Reponse Inconsistency", 9],
+      ["TRIN", "True Response Inconsistency", 9],
       [
         [3, "T", 39, "T", 1],
         [12, "T", 166, "T", 1],

@@ -63,6 +63,106 @@ function append_text(txt) {
   longform = true;	// All questions or first 370
   gender = 0;		// 0==male, 1==female
   ans = []; 		// Answers to questions: [T,F,?]
+  learningMode = false;
+
+  // 逐题专业讲解从独立数据文件加载；当前按需求保留为空。
+  questionLearningExplanations = window.questionLearningExplanations || {};
+
+  const learningPrimaryScales = new Set([
+    "F", "Fb", "Fp", "L", "K", "S",
+    "Hs", "D", "Hy", "Pd", "Mf", "Pa", "Pt", "Sc", "Ma", "Si",
+    "ANX", "FRS", "OBS", "DEP", "HEA", "BIZ", "ANG", "CYN", "ASP",
+    "TPA", "LSE", "SOD", "FAM", "WRK", "TRT"
+  ]);
+
+  const learningScaleNames = {
+    F: "低频回答", Fb: "后半部分低频回答", Fp: "精神病理低频回答",
+    L: "说谎/过度美化", K: "校正/防御性", S: "超级自我呈现",
+    Hs: "疑病", D: "抑郁", Hy: "癔症", Pd: "社会偏离",
+    Mf: "男性化—女性化", Pa: "偏执", Pt: "精神衰弱",
+    Sc: "精神分裂特征", Ma: "轻躁狂", Si: "社会内向",
+    D1: "主观抑郁", D2: "精神运动迟滞", D3: "身体功能障碍",
+    D4: "思维迟钝", D5: "沉思与反刍",
+    Hy1: "否认社交焦虑", Hy2: "情感需求", Hy3: "倦怠与不适",
+    Hy4: "躯体不适", Hy5: "攻击性抑制",
+    Pd1: "家庭不和", Pd2: "权威问题", Pd3: "社交镇定",
+    Pd4: "社会疏离", Pd5: "自我疏离",
+    Pa1: "被迫害观念", Pa2: "敏感性", Pa3: "天真",
+    Sc1: "社会疏离", Sc2: "情感疏离", Sc3: "自我控制缺失（认知）",
+    Sc4: "自我控制缺失（意志）", Sc5: "自我控制缺失（抑制缺陷）",
+    Sc6: "异常感觉体验",
+    Ma1: "非道德性", Ma2: "精神运动加速", Ma3: "沉着",
+    Ma4: "自我膨胀",
+    Si1: "害羞与自我意识", Si2: "社交回避", Si3: "自我与他人疏离",
+    ANX: "焦虑", FRS: "恐惧", OBS: "强迫性", DEP: "抑郁内容",
+    HEA: "健康关注", BIZ: "异常思维", ANG: "愤怒", CYN: "愤世嫉俗",
+    ASP: "反社会行为", TPA: "A型行为", LSE: "低自尊",
+    SOD: "社交不适", FAM: "家庭问题", WRK: "工作干扰", TRT: "消极治疗指标",
+    A: "焦虑", R: "压抑", Es: "自我力量",
+    "MAC-R": "麦克安德鲁酗酒量表（修订版）", AAS: "成瘾承认",
+    APS: "成瘾倾向", MDS: "婚姻困扰", Ho: "敌意",
+    "O-H": "过度控制的敌意", Do: "支配性", Re: "社会责任",
+    Mt: "大学适应不良", GM: "男性性别角色", GF: "女性性别角色",
+    PK: "创伤后应激障碍", PS: "创伤后应激障碍",
+    "D-O": "明显抑郁", "D-S": "隐性抑郁",
+    "Hy-O": "明显癔症", "Hy-S": "隐性癔症",
+    "Pd-O": "明显社会偏离", "Pd-S": "隐性社会偏离",
+    "Pa-O": "明显偏执", "Pa-S": "隐性偏执",
+    "Ma-O": "明显轻躁狂", "Ma-S": "隐性轻躁狂",
+    dem: "士气低落", som: "躯体不适", lpe: "低积极情绪",
+    cyn: "愤世嫉俗", asb: "反社会行为", per: "被迫害观念",
+    dne: "功能失调性负性情绪", abx: "异常体验", hpm: "轻躁狂激活",
+    AGGR: "攻击性", PSYC: "精神病性", DISC: "行为失控与不受约束",
+    NEGE: "负性情绪与神经质", INTR: "内向与低积极情绪",
+    FRS1: "广泛恐惧", FRS2: "多重恐惧",
+    DEP1: "动力缺乏", DEP2: "心境恶劣", DEP3: "自我贬低",
+    DEP4: "自杀意念",
+    HEA1: "胃肠道症状", HEA2: "神经系统症状", HEA3: "一般健康关注",
+    BIZ1: "精神病性症状", BIZ2: "分裂型特征",
+    ANG1: "爆发性行为", ANG2: "易激惹",
+    CYN1: "厌世信念", CYN2: "人际猜疑",
+    ASP1: "反社会态度", ASP2: "反社会行为",
+    TPA1: "不耐烦", TPA2: "竞争驱力",
+    LSE1: "自我怀疑", LSE2: "顺从",
+    SOD1: "内向", SOD2: "害羞",
+    FAM1: "家庭不和", FAM2: "家庭疏离",
+    TRT1: "治疗动机不足", TRT2: "无法自我袒露",
+    KB1: "科斯—布彻关键项目：急性焦虑",
+    KB2: "科斯—布彻关键项目：抑郁与自杀意念",
+    KB3: "科斯—布彻关键项目：攻击威胁",
+    KB4: "科斯—布彻关键项目：酒精问题导致的情境压力",
+    KB5: "科斯—布彻关键项目：精神混乱",
+    KB6: "科斯—布彻关键项目：被迫害观念",
+    LW1: "拉查—罗贝尔关键项目：焦虑与紧张",
+    LW2: "拉查—罗贝尔关键项目：抑郁与担忧",
+    LW3: "拉查—罗贝尔关键项目：睡眠障碍",
+    LW4: "拉查—罗贝尔关键项目：异常信念",
+    LW5: "拉查—罗贝尔关键项目：异常思维与体验",
+    LW6: "拉查—罗贝尔关键项目：物质滥用",
+    LW7: "拉查—罗贝尔关键项目：反社会态度",
+    LW8: "拉查—罗贝尔关键项目：家庭冲突",
+    LW9: "拉查—罗贝尔关键项目：问题性愤怒",
+    LW10: "拉查—罗贝尔关键项目：性关注与偏离",
+    LW11: "拉查—罗贝尔关键项目：躯体症状"
+  };
+
+  const rinScaleLabels = {
+    VRIN: "逆向回答不一致（Variable Response Inconsistency）",
+    TRIN: "同向回答不一致（True Response Inconsistency）"
+  };
+
+  function is_critical_item_scale(scale) {
+    return scale[3] === undefined && scale[4] === undefined;
+  }
+
+  function has_active_tscore_table(scale, selectedGender) {
+    const table = scale[3 + selectedGender];
+    return Array.isArray(table) && table.length > 0;
+  }
+
+  function rin_scale_description(scaleName, fallbackDescription) {
+    return rinScaleLabels[scaleName] || fallbackDescription;
+  }
   
   /* meowmeow 20230307 */
   // var ans_debug = ["FTTTTFFFFFTTFTTTTTFFFFTFTTFTTFTTTTTTFFFTTTTFTFFFTFFTTFTTTFTTTTFTTTTFFFFFFFTTTFFFFFFTFFTTTFTFFTTFFFTTTFFFFFTFFTFFFTTTFFFFFFTFTFFTFFTFFTTTFTTFFTFTTFTFFFFTTTFFTTFFFFTFTTTFTTTFTTFFTTTTFFTFFFTFTTTFTFTTTTFFFFFFTTFFTTFTFFFTTFTTFFTFTTTFTTFFFTFTFTTFTFTFTTFFFFFFTFFTTFTTFTFFTTFFFTFTFFTFTFTTTTTTFTFFTFTFFTFFFFFFFTFFFFFFFTTTFTFFFFFTFTFTTTTFFFFTTTTTFFTFFFTTTFFTTTFTFFTFFTTFFTFFFTTTTFTFTTTFTFFTFFTFTFFTTTFTFTFTTTFFTTTFTFFFTTTFTFTFTFTTFTTFFTTTFFTFTFFTTTTTFTTFFFTTFFFTFFTTFTFTFTTTFFTTTFTTFTFFFTTFTFTTFTTFTTFFTTFTFFFTTTFTFTFFTFTFTTTFFFFFTTFFTTTFTTTFTFFTTFFFTFTTFTTTFFFFFFTTFFFFTFFFTTF"]
@@ -127,7 +227,7 @@ function append_text(txt) {
       // Append results to scale table
       // append_tr(scale_table, rin[i][0][0], rin[i][0][1], rawscore, " ", rin[i][2 + gender][rawscore], " ");
       // 20240823 同样的，值为undefined的时候，显示别的东西。注意TRIN与VRIN与其他的表项是分开处理的。话说这两项是什么意思来着？
-      append_tr(scale_table, rin[i][0][0], rin[i][0][1], rawscore, " ", rin[i][2 + gender][rawscore] === undefined ? "过高或过低" : rin[i][2 + gender][rawscore], " ");
+      append_tr(scale_table, rin[i][0][0], rin_scale_description(rin[i][0][0], rin[i][0][1]), rawscore, " ", rin[i][2 + gender][rawscore] === undefined ? "过高或过低" : rin[i][2 + gender][rawscore], " ");
     }
   
     // Score the scales and critical items
@@ -139,6 +239,14 @@ function append_text(txt) {
       rawscore = 0;
       // Get the T score table, critcal items will not have this (undefined)
       tscale = scales[i][3 + gender];
+
+      // Mf 分别保存男性和女性常模，未使用的一侧是空数组。
+      // 跳过空常模，但保留数组占位，避免后续图表和解释的固定索引错位。
+      if (!is_critical_item_scale(scales[i]) && !has_active_tscore_table(scales[i], gender)) {
+        tscoreArray.push(undefined);
+        continue;
+      }
+
       // Iterate the True question list
       for (j = 0; j < scales[i][1].length; ++j) {
         // Get the question number
@@ -456,38 +564,283 @@ function append_text(txt) {
     const form = document.getElementById("select_all");
     form.elements['invisible_question'].value = g;
 
+    if (learningMode) {
+      refresh_learning_feedback();
+    }
+
     //alert("gender: "+g);
   }
   
   // Set the test length - called by onclick() event in the form
   function use_long_form(lf) {
+    longform = lf;
     let lfd = document.getElementById("longformdiv");
     lfd.style.display = lf ? "inline" : "none";
+  }
+
+  function set_learning_mode(enabled) {
+    learningMode = Boolean(enabled);
+    document.body.classList.toggle("learning-mode-active", learningMode);
+
+    const note = document.getElementById("learning-mode-note");
+    if (note) {
+      note.hidden = !learningMode;
+    }
+
+    if (learningMode) {
+      refresh_learning_feedback();
+    } else {
+      document.querySelectorAll(".learning-feedback").forEach(function(feedback) {
+        feedback.hidden = true;
+      });
+    }
+  }
+
+  function refresh_learning_feedback() {
+    if (!learningMode || !document.forms.questions) { return; }
+
+    for (let questionNumber = 1; questionNumber < questions.length; questionNumber++) {
+      const selectedAnswer = radio_value(document.forms.questions.elements["Q" + questionNumber]);
+      if (selectedAnswer) {
+        render_learning_feedback(questionNumber, selectedAnswer);
+      }
+    }
+  }
+
+  function handle_learning_answer(questionNumber, answer) {
+    if (!learningMode) { return; }
+    render_learning_feedback(questionNumber, answer);
+
+    // 一致性量表由题对共同计分。答完当前题时，同时刷新已经回答的配对题。
+    get_rin_impacts(questionNumber).forEach(function(impact) {
+      const pairedAnswer = radio_value(document.forms.questions.elements["Q" + impact.otherQuestion]);
+      if (pairedAnswer) {
+        render_learning_feedback(impact.otherQuestion, pairedAnswer);
+      }
+    });
+  }
+
+  function get_scale_impacts(questionNumber, answer) {
+    const impacts = [];
+
+    scales.forEach(function(scale) {
+      const metadata = scale[0] || [];
+      const scaleName = metadata[1] || "未命名量表";
+      const trueKeyed = scale[1].indexOf(questionNumber) !== -1;
+      const falseKeyed = scale[2].indexOf(questionNumber) !== -1;
+      if (!trueKeyed && !falseKeyed) { return; }
+
+      const isCriticalItemGroup = is_critical_item_scale(scale);
+      const isUsedForSelectedGender = isCriticalItemGroup || has_active_tscore_table(scale, gender);
+      if (!isUsedForSelectedGender) { return; }
+
+      const keyedAnswer = trueKeyed ? "T" : "F";
+      impacts.push({
+        name: scaleName,
+        description: metadata[2] || "",
+        keyedAnswer: keyedAnswer,
+        matched: answer === keyedAnswer,
+        critical: isCriticalItemGroup,
+        primary: learningPrimaryScales.has(scaleName),
+        normLabel: scaleName === "Mf" ? (gender === 0 ? "男性常模" : "女性常模") : "",
+        tscoreDirection: scaleName === "Mf" ? (gender === 0 ? "上升" : "下降") : ""
+      });
+    });
+
+    return impacts;
+  }
+
+  function get_rin_impacts(questionNumber) {
+    const impacts = [];
+
+    rin.forEach(function(rinScale) {
+      const scaleName = rinScale[0][0];
+      const scaleDescription = rinScale[0][1];
+      rinScale[1].forEach(function(pair) {
+        if (pair[0] !== questionNumber && pair[2] !== questionNumber) { return; }
+
+        const isFirst = pair[0] === questionNumber;
+        impacts.push({
+          name: scaleName,
+          description: rin_scale_description(scaleName, scaleDescription),
+          keyedAnswer: isFirst ? pair[1] : pair[3],
+          otherQuestion: isFirst ? pair[2] : pair[0],
+          otherKeyedAnswer: isFirst ? pair[3] : pair[1],
+          delta: pair[4]
+        });
+      });
+    });
+
+    return impacts;
+  }
+
+  function answer_label(answer) {
+    return answer === "T" ? "是" : "否";
+  }
+
+  function rin_pair_meaning(impact) {
+    if (impact.name === "VRIN") {
+      return "该组合会增加VRIN原始分，表示这组题被计分键标记为内容回答不一致。";
+    }
+
+    if (impact.name === "TRIN" && impact.delta > 0) {
+      return "该组合会使TRIN向肯定作答方向变化，表示更偏向连续选择“是”。";
+    }
+
+    if (impact.name === "TRIN" && impact.delta < 0) {
+      return "该组合会使TRIN向否定作答方向变化，表示更偏向连续选择“否”。";
+    }
+
+    return "该组合会改变该一致性指标的原始分。";
+  }
+
+  function append_learning_impact_list(container, impacts) {
+    const list = document.createElement("ul");
+
+    impacts.forEach(function(impact) {
+      const item = document.createElement("li");
+      const title = document.createElement("strong");
+      const chineseName = learningScaleNames[impact.name];
+      const labelDetail = impact.normLabel || chineseName;
+      title.textContent = impact.name + (impact.description ? " · " + impact.description : "") +
+        (labelDetail ? "（" + labelDetail + "）" : "");
+      item.appendChild(title);
+
+      const effect = document.createElement("span");
+      effect.className = impact.matched ? "learning-points-hit" : "learning-points-miss";
+      if (impact.critical) {
+        effect.textContent = impact.matched ? " — 命中关键项目" : " — 未命中关键项目";
+      } else {
+        effect.textContent = impact.matched ? " — 原始分 +1" : " — 原始分 +0";
+      }
+      item.appendChild(effect);
+
+      const key = document.createElement("div");
+      key.textContent = "计分方向：回答“" + answer_label(impact.keyedAnswer) + "”时" +
+        (impact.critical ? "命中该关键项目。" : "计入1个原始分。最终T分还会受常模换算及可能的K校正影响。");
+      item.appendChild(key);
+
+      if (impact.tscoreDirection) {
+        const direction = document.createElement("div");
+        direction.textContent = "Mf换算方向：在" + impact.normLabel + "中，原始分增加会使最终T分倾向" +
+          impact.tscoreDirection + "。这不是另一个独立的“男性化分”或“女性化分”。";
+        item.appendChild(direction);
+      }
+
+      list.appendChild(item);
+    });
+
+    container.appendChild(list);
+  }
+
+  function render_learning_feedback(questionNumber, answer) {
+    const feedback = document.getElementById("learning-feedback-" + questionNumber);
+    if (!feedback || !learningMode) { return; }
+
+    feedback.textContent = "";
+    feedback.hidden = false;
+
+    const heading = document.createElement("h3");
+    heading.textContent = "第 " + questionNumber + " 题计分拆解";
+    feedback.appendChild(heading);
+
+    const selected = document.createElement("p");
+    selected.textContent = "你的选择：" + answer_label(answer) + "。以下只展示当前项目在本项目计分键中的直接影响。";
+    feedback.appendChild(selected);
+
+    const impacts = get_scale_impacts(questionNumber, answer);
+    const primaryImpacts = impacts.filter(function(impact) { return impact.primary; });
+    const additionalImpacts = impacts.filter(function(impact) { return !impact.primary; });
+
+    if (primaryImpacts.length > 0) {
+      const subheading = document.createElement("h4");
+      subheading.textContent = "主要影响量表";
+      feedback.appendChild(subheading);
+      append_learning_impact_list(feedback, primaryImpacts);
+    }
+
+    if (additionalImpacts.length > 0) {
+      const details = document.createElement("details");
+      const summary = document.createElement("summary");
+      summary.textContent = "查看另外 " + additionalImpacts.length + " 个细分、补充或关键项目量表";
+      details.appendChild(summary);
+      append_learning_impact_list(details, additionalImpacts);
+      feedback.appendChild(details);
+    }
+
+    if (impacts.length === 0) {
+      const noDirectScore = document.createElement("p");
+      noDirectScore.textContent = "本题未出现在当前性别所使用的单项量表计分键中。";
+      feedback.appendChild(noDirectScore);
+    }
+
+    const rinImpacts = get_rin_impacts(questionNumber);
+    if (rinImpacts.length > 0) {
+      const details = document.createElement("details");
+      const summary = document.createElement("summary");
+      summary.textContent = "一致性题对（" + rinImpacts.length + " 组）";
+      details.appendChild(summary);
+
+      const list = document.createElement("ul");
+      rinImpacts.forEach(function(impact) {
+        const otherAnswer = radio_value(document.forms.questions.elements["Q" + impact.otherQuestion]);
+        const pairMatched = answer === impact.keyedAnswer && otherAnswer === impact.otherKeyedAnswer;
+        const item = document.createElement("li");
+        const scoringRule = "与第 " + impact.otherQuestion + " 题组成题对。计分组合：本题“" +
+          answer_label(impact.keyedAnswer) + "”且配对题“" + answer_label(impact.otherKeyedAnswer) +
+          "”，此时题对变化 " + (impact.delta > 0 ? "+" : "") + impact.delta + "。";
+        let currentStatus = "配对题尚未作答，因此暂时不能判断该题对是否计分。";
+        if (otherAnswer) {
+          const currentCombination = "当前组合：本题“" + answer_label(answer) + "”、第 " +
+            impact.otherQuestion + " 题“" + answer_label(otherAnswer) + "”。";
+          currentStatus = pairMatched
+            ? currentCombination + "已触发上述计分组合，题对变化 " +
+              (impact.delta > 0 ? "+" : "") + impact.delta + "。"
+            : currentCombination + "没有触发上述计分组合，本题对变化 0。";
+        }
+        item.textContent = impact.name + " · " + impact.description + "：" + scoringRule +
+          rin_pair_meaning(impact) + currentStatus;
+        list.appendChild(item);
+      });
+      details.appendChild(list);
+      feedback.appendChild(details);
+    }
+
+    const explanation = document.createElement("p");
+    explanation.className = "learning-explanation-placeholder";
+    explanation.textContent = questionLearningExplanations[questionNumber]
+      ? "本题讲解：" + questionLearningExplanations[questionNumber]
+      : "本题讲解：待补充";
+    feedback.appendChild(explanation);
   }
   
   
   
   function my_doc_write_all_questions() {
     for (var i = 1; i < questions.length; ++i) {
-      my_doc_write_question("Q" + i, i + ". " + questions[i], questions_zh[i]);
+      my_doc_write_question(i, "Q" + i, i + ". " + questions[i], questions_zh[i]);
       if (i === 370) { document.write("<div id=\"longformdiv\">"); }
     }
     if (i > 370) { document.write("<\/div>"); }
   }
   
-  function my_doc_write_question(name, text, text_zh) {
-    document.write(text + "<br>", text_zh + "<br>");
+  function my_doc_write_question(questionNumber, name, text, text_zh) {
+    document.write("<section class=\"question-card\" id=\"question-card-" + questionNumber + "\">");
+    document.write("<div class=\"question-copy\">" + text + "<br>" + text_zh + "</div>");
+    document.write("<div class=\"answer-options\">");
 
     /* 下面这行是原版。现在为了debug，加一个checked标签使该选项默认选中 */ 
-    document.write("<input type=\"radio\" id=" + name + " name=\"" + name + "\"value=\"T\" required=\"required\" ><label for=" + name +">是</label>");
+    document.write("<input type=\"radio\" id=" + name + " name=\"" + name + "\" value=\"T\" required=\"required\" onchange=\"handle_learning_answer(" + questionNumber + ", this.value)\"><label for=" + name +">是</label>");
 
     /* For debugging... */
     // document.write("<input type=\"radio\" id=" + name + " name=\"" + name + "\" value=\"T\" required=\"required\" checked=\"checked\"><label for=" + name + ">是</label>");
 
     // document.write("<input type=\"radio\" name=" + name + " value=\"T\" >是");
     // document.write("<input type=\"radio\" name=" + name + " value=\"F\">否");
-    document.write("<input type=\"radio\" id=Not_" + name + " name=\"" + name + "\"value=\"F\" required=\"required\" ><label for=Not_" + name +">否</label>");
-    document.write("<br><br><br>");
+    document.write("<input type=\"radio\" id=Not_" + name + " name=\"" + name + "\" value=\"F\" required=\"required\" onchange=\"handle_learning_answer(" + questionNumber + ", this.value)\"><label for=Not_" + name +">否</label>");
+    document.write("</div>");
+    document.write("<div class=\"learning-feedback\" id=\"learning-feedback-" + questionNumber + "\" aria-live=\"polite\" hidden></div>");
+    document.write("</section>");
   }
 
 
@@ -558,7 +911,7 @@ function append_text(txt) {
         }
       }
       // Append results to scale table
-      append_tr(scale_table, rin[i][0][0], rin[i][0][1], rawscore, " ", rin[i][2 + gender][rawscore], " ");
+      append_tr(scale_table, rin[i][0][0], rin_scale_description(rin[i][0][0], rin[i][0][1]), rawscore, " ", rin[i][2 + gender][rawscore], " ");
     }
   
     // Score the scales and critical items
@@ -1309,7 +1662,7 @@ function showModal() {
       <span class="modal-close" onclick="hideModal()"></span>
       <h1>重要提示</h1>
       <p>0、请勿空题！虽然该量表在设计时允许空题，但是这会产生蝴蝶效应，使得量表对于没有阅读障碍的被试的可信度大大降低。另外，若能理解英文题干（并转化至中文语境），最好不要看中文。MMPI-2的567题版本通常需要40分钟以上完成。</p>
-      <p>1、我们不会收集任何与您有关的信息；但做完量表后，会有一个<b>共享结果</b>的按钮，如果您愿意将您的作答结果发送给我们进行统计，可以点击该按钮。这只会发送结果，并不记录任何与您有关的信息。为了避免测试白做，请一定要<b>先点击提交测试</b>按钮并查看您的结果！（建议截图）</p>
+      <p>1、本地版本不会把作答结果发送到第三方服务。完成后请点击<b>提交测试</b>按钮，在当前页面查看结果（建议截图保存）。</p>
       <p>2、请认真对待该测验；MMPI是少有的具有完整理论与多年实践的专业（人格）量表，可以帮助您更好地认识自己。需要注意的是，由于该量表常用于临床，因此它主要着眼于您“<b>也许</b>存在的问题”以及“<b>也许</b>拥有的人格特质”，而非像16pf之类的量表尝试将您划分为“某种人格”。</p>
       <p>3、该量表的结果（真的真的）仅供参考；这是因为，虽然本网站根据您的选择计算得到的一致性T分是准确的，但是由于诸多限制，给出的解释是十分贫瘠且有限的。现实中，对该量表做出解释高度依赖于被试的态度、职业，以及一些特殊情景（如近期事件）等；若您希望获得更详细的解答，可以保存我们给出的量表的剖析图，并在日后咨询专业人士。</p>
       <p>4、点击<b>提交测试</b>后，您将得到：两张人格剖析图、您作答的原始数据以及一些关键选项（均供专业人士使用；建议您保存以待后用），以及一份简略的解释；正如<b>2</b>所言，请勿过分较真。</p>

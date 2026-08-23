@@ -11,6 +11,7 @@
 
   <title>MMPI-2中英对照测试</title>
   <script type="text/javascript" src="origin_js/my_data.js"></script>
+  <script type="text/javascript" src="origin_js/learning_explanations.js"></script>
   <script type="text/javascript" src="origin_js/my_script.js"></script>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.min.js"></script>
@@ -127,6 +128,133 @@
         background-color: #B0C4DE;
         color: white;
     }
+
+    .mode-panel {
+      width: min(760px, calc(100% - 32px));
+      margin: 28px auto;
+      padding: 18px 22px;
+      box-sizing: border-box;
+      border: 1px solid rgba(176, 196, 222, 0.65);
+      border-radius: 14px;
+      background: rgba(176, 196, 222, 0.08);
+      text-align: left;
+    }
+
+    .mode-panel h2 {
+      margin: 0 0 10px;
+      font-size: 1.35rem;
+    }
+
+    .mode-option {
+      display: inline-flex;
+      align-items: center;
+      margin: 6px 22px 6px 0;
+      cursor: pointer;
+    }
+
+    .mode-option input {
+      margin-right: 8px;
+    }
+
+    .mode-help {
+      margin: 10px 0 0;
+      color: #c8d4df;
+      font-size: 1rem;
+      line-height: 1.65;
+    }
+
+    .question-card {
+      width: min(980px, calc(100% - 32px));
+      margin: 0 auto 22px;
+      padding: 18px 20px;
+      box-sizing: border-box;
+      border-radius: 12px;
+      text-align: left;
+    }
+
+    .learning-mode-active .question-card {
+      background: rgba(255, 255, 255, 0.045);
+      border: 1px solid rgba(176, 196, 222, 0.28);
+    }
+
+    .question-copy {
+      line-height: 1.65;
+    }
+
+    .answer-options {
+      margin-top: 10px;
+    }
+
+    .learning-feedback {
+      margin-top: 16px;
+      padding: 16px;
+      border-left: 4px solid #88a9c3;
+      border-radius: 8px;
+      background: rgba(11, 15, 18, 0.72);
+      color: #edf4f8;
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+
+    .learning-feedback[hidden] {
+      display: none;
+    }
+
+    .learning-feedback h3,
+    .learning-feedback h4 {
+      margin: 0 0 8px;
+      color: #dceaf4;
+    }
+
+    .learning-feedback p {
+      margin: 6px 0;
+    }
+
+    .learning-feedback ul {
+      margin: 8px 0 0;
+      padding-left: 22px;
+    }
+
+    .learning-feedback li {
+      margin-bottom: 8px;
+    }
+
+    .learning-points-hit {
+      color: #8bd7a5;
+      font-weight: 700;
+    }
+
+    .learning-points-miss {
+      color: #cbd5dc;
+      font-weight: 700;
+    }
+
+    .learning-explanation-placeholder {
+      margin-top: 14px !important;
+      padding-top: 12px;
+      border-top: 1px dashed rgba(176, 196, 222, 0.35);
+      color: #b9c4cc;
+    }
+
+    .learning-feedback details {
+      margin-top: 10px;
+    }
+
+    .learning-feedback summary {
+      cursor: pointer;
+      color: #b9d6ea;
+    }
+
+    @media (max-width: 640px) {
+      .mode-panel,
+      .question-card {
+        width: calc(100% - 20px);
+      }
+
+      .question-card {
+        padding: 15px;
+      }
+    }
   </style>
 </head>
 <body><div>
@@ -163,19 +291,23 @@
       <input type="radio" name="testform" value="L" onclick="use_long_form(true);" checked="">Long
       <input type="radio" name="testform" value="S" onclick="use_long_form(false);">Short
     </p>
+
+    <div class="mode-panel">
+      <h2>答题模式</h2>
+      <label class="mode-option" for="mode-standard">
+        <input id="mode-standard" type="radio" name="answer-mode" value="standard" onchange="set_learning_mode(false);" checked>
+        普通测评
+      </label>
+      <label class="mode-option" for="mode-learning">
+        <input id="mode-learning" type="radio" name="answer-mode" value="learning" onchange="set_learning_mode(true);">
+        学习模式
+      </label>
+      <p id="learning-mode-note" class="mode-help" hidden>每次作答后显示该题进入的量表、计分方向和本次原始分变化；逐题专业讲解暂留空，最终仍按原有方法正常计分。</p>
+    </div>
   </form>
 
-  <!-- 2023.11.15 尝试用trick来白嫖表单收集次数 -->
-  <!-- 只是更改action的内容，康康会不会被出警 -->
-  <!-- https://formspree.io/f/mgebzeqq 对应的是Crime1 -->
-  <!-- https://formspree.io/f/mknlaree 对应的是Crime2 -->
-  <!-- https://formspree.io/f/myyqajok 对应的是Crime3 -->
-  <!-- https://formspree.io/f/xoqgvzbr 对应的是Crime4 -->
-  
-  <!-- 20240514 尝试在POST的时候进行检查，以减少无用表项的收集。 -->
-  <form id="select_all" name="questions" onsubmit="return validateForm()" action="https://formspree.io/f/mgebzeqq" method="POST">
-<!--   <form id="select_all" name="questions" onsubmit="return validateForm()" action="https://formspree.io/f/myyqajok" method="POST"> -->
-<!--   <form id="select_all" name="questions" onsubmit="return validateForm()" action="https://formspree.io/f/xoqgvzbr" method="POST"> -->
+  <!-- 本地版本只在浏览器中计分，不提交到第三方表单。 -->
+  <form id="select_all" name="questions" onsubmit="return false;" action="#">
     <p>
 
       <!-- 2024.5.14 尝试加一个不可见的问题，并且通过性别那里的onclick在这里标注出来，从而可以传输性别。
@@ -186,16 +318,11 @@
 
       <script type="text/javascript">my_doc_write_all_questions();</script>
 
-      <!-- 2023.5.26添加按钮的注释 -->
+      <!-- 本地二次开发版本不向原项目作者的第三方表单发送作答数据。 -->
       <div style="width:60%; margin:0 auto;text-align:center; color:#B0C4DE;font-family:KaiTi;">
-        <p>“发送结果”按钮表示您愿意将结果以匿名的方式发给我们留底，“提交测试”按钮则是在当前页面呈现您的测试结果。无论如何，都请您先点击“提交测试”按钮，以避免浏览器卡死导致测试白做。</p>
+        <p>作答数据仅在当前页面用于计分。完成后请点击“提交测试”，在本页查看分数、剖面图和结果说明。</p>
       </div>
-      
-      <button class="my_button" type="submit" name="check" value="meow~~"><span>发送结果</span></button>
-      <!-- 花招：当form中只有一个button时，这个button将会被视为submit，进而触发required，使得无法空题。
-            问题：submit是不是也可以直接挂一个onclick？反正在没有后端的情况下，submit也不会“报错” -->
-      <br>
-      <!-- <br> -->
+
       <input class="my_button" type="button" value="提交测试" onclick="score_rb(document.forms.questions);">
       <br>
       
