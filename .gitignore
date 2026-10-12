@@ -1,0 +1,5 @@
+# Local assessment results may contain sensitive information.
+storage/results/*/
+storage/results/*.json
+storage/results/*.md
+!storage/results/README.md

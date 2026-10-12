@@ -65,6 +65,15 @@ function append_text(txt) {
   ans = []; 		// Answers to questions: [T,F,?]
   learningMode = false;
 
+  // 当前仓库没有附带可核验、获授权的中国常模转换表。
+  // 原项目说明这些查分表可能基于美国常模，因此保存时明确记录来源状态。
+  const currentNormMetadata = {
+    id: "legacy-project-default",
+    label: "原项目内置常模表（原作者说明可能基于美国常模）",
+    region: "unverified",
+    scoreMethod: "原项目内置原始分到T分查表"
+  };
+
   // 逐题专业讲解从独立数据文件加载；当前按需求保留为空。
   questionLearningExplanations = window.questionLearningExplanations || {};
 
@@ -437,6 +446,281 @@ function append_text(txt) {
       }
     }
   }
+
+  function result_value_or_null(value) {
+    return value === undefined || (typeof value === "number" && !Number.isFinite(value))
+      ? null
+      : value;
+  }
+
+  function build_test_result() {
+    const questionCount = longform ? questions.length - 1 : 370;
+    const savedAnswers = [];
+    let trueCount = 0;
+    let falseCount = 0;
+    let unansweredCount = 0;
+
+    for (let questionNumber = 1; questionNumber <= questionCount; questionNumber++) {
+      const answer = ans[questionNumber] === "T" || ans[questionNumber] === "F"
+        ? ans[questionNumber]
+        : "?";
+      if (answer === "T") { trueCount++; }
+      else if (answer === "F") { falseCount++; }
+      else { unansweredCount++; }
+
+      savedAnswers.push({
+        questionNumber: questionNumber,
+        answer: answer,
+        questionZh: questions_zh[questionNumber] || "",
+        questionEn: questions[questionNumber] || ""
+      });
+    }
+
+    const responseConsistency = rin.map(function(rinScale) {
+      let rawScore = rinScale[0][2];
+      rinScale[1].forEach(function(pair) {
+        if (ans[pair[0]] === pair[1] && ans[pair[2]] === pair[3]) {
+          rawScore += pair[4];
+        }
+      });
+      const tScoreTable = rinScale[2 + gender];
+      return {
+        name: rinScale[0][0],
+        description: rin_scale_description(rinScale[0][0], rinScale[0][1]),
+        rawScore: rawScore,
+        tScore: result_value_or_null(tScoreTable ? tScoreTable[rawScore] : undefined)
+      };
+    });
+
+    const savedScales = [];
+    const criticalItems = [];
+    let kRawScore = 0;
+
+    scales.forEach(function(scale) {
+      const metadata = scale[0] || [];
+      const scaleName = metadata[1] || "未命名量表";
+      const criticalScale = is_critical_item_scale(scale);
+      const tScoreTable = scale[3 + gender];
+      if (!criticalScale && !has_active_tscore_table(scale, gender)) { return; }
+
+      let rawScore = 0;
+      let answeredItems = 0;
+
+      scale[1].forEach(function(questionNumber) {
+        if (ans[questionNumber] === "T" || ans[questionNumber] === "F") {
+          answeredItems++;
+        }
+        if (ans[questionNumber] === "T") {
+          rawScore++;
+          if (criticalScale) {
+            criticalItems.push({
+              scaleName: scaleName,
+              scaleDescription: metadata[2] || "",
+              questionNumber: questionNumber,
+              answer: "T",
+              questionZh: questions_zh[questionNumber] || "",
+              questionEn: questions[questionNumber] || ""
+            });
+          }
+        }
+      });
+
+      scale[2].forEach(function(questionNumber) {
+        if (ans[questionNumber] === "T" || ans[questionNumber] === "F") {
+          answeredItems++;
+        }
+        if (ans[questionNumber] === "F") {
+          rawScore++;
+          if (criticalScale) {
+            criticalItems.push({
+              scaleName: scaleName,
+              scaleDescription: metadata[2] || "",
+              questionNumber: questionNumber,
+              answer: "F",
+              questionZh: questions_zh[questionNumber] || "",
+              questionEn: questions[questionNumber] || ""
+            });
+          }
+        }
+      });
+
+      if (criticalScale) { return; }
+      if (metadata[0] === "K") { kRawScore = rawScore; }
+
+      let kCorrectedScore = null;
+      let scoreLookupIndex = rawScore;
+      if (tScoreTable[0]) {
+        kCorrectedScore = Math.floor(kRawScore * tScoreTable[0] + rawScore + 0.5);
+        scoreLookupIndex = kCorrectedScore;
+      }
+
+      const keyedItemCount = scale[1].length + scale[2].length;
+      savedScales.push({
+        code: result_value_or_null(metadata[0]),
+        name: scaleName,
+        chineseName: learningScaleNames[scaleName] || "",
+        description: metadata[2] || "",
+        rawScore: rawScore,
+        kCorrectedScore: kCorrectedScore,
+        tScore: result_value_or_null(tScoreTable[scoreLookupIndex + 1]),
+        answeredItems: answeredItems,
+        keyedItemCount: keyedItemCount,
+        isComplete: answeredItems === keyedItemCount,
+        answeredPercent: keyedItemCount > 0
+          ? Number((answeredItems * 100 / keyedItemCount).toFixed(2))
+          : 0
+      });
+    });
+
+    return {
+      schemaVersion: 1,
+      createdAt: new Date().toISOString(),
+      test: {
+        instrument: "MMPI-2",
+        form: longform ? "long" : "short",
+        questionCount: questionCount,
+        gender: gender === 1 ? "female" : "male",
+        mode: learningMode ? "learning" : "standard",
+        norm: currentNormMetadata
+      },
+      summary: {
+        questionCount: questionCount,
+        answeredCount: questionCount - unansweredCount,
+        trueCount: trueCount,
+        falseCount: falseCount,
+        unansweredCount: unansweredCount
+      },
+      responseConsistency: responseConsistency,
+      scales: savedScales,
+      criticalItems: criticalItems,
+      answers: savedAnswers
+    };
+  }
+
+  let resultSaveSequence = 0;
+
+  function append_ptsd_result_summary(result) {
+    const ptsdScales = result.scales.filter(function(scale) {
+      return scale.name === "PK" || scale.name === "PS";
+    });
+    if (ptsdScales.length === 0) { return; }
+
+    const section = document.createElement("section");
+    section.className = "ptsd-result-summary";
+
+    const heading = document.createElement("h2");
+    heading.textContent = "PTSD 补充量表（PK / PS）";
+    section.appendChild(heading);
+
+    const intro = document.createElement("p");
+    intro.textContent = "以下项目已从完整结果中单独列出，便于查看。PK、PS是补充筛查指标，不能单独诊断PTSD。";
+    section.appendChild(intro);
+
+    const table = document.createElement("table");
+    const headerRow = document.createElement("tr");
+    ["量表", "原始分", "T分", "已答/计分题", "作答率", "可解释性"].forEach(function(label) {
+      const cell = document.createElement("th");
+      cell.textContent = label;
+      headerRow.appendChild(cell);
+    });
+    table.appendChild(headerRow);
+
+    ptsdScales.forEach(function(scale) {
+      const row = document.createElement("tr");
+      const complete = scale.answeredItems === scale.keyedItemCount;
+      const values = [
+        scale.name,
+        scale.rawScore,
+        scale.tScore === null ? "过高或过低" : scale.tScore,
+        scale.answeredItems + "/" + scale.keyedItemCount,
+        scale.answeredPercent + "%",
+        complete ? "题目完整；仅作补充筛查" : "题目不完整，T分不宜解释"
+      ];
+      values.forEach(function(value, index) {
+        const cell = document.createElement("td");
+        cell.textContent = value;
+        if (!complete && index === values.length - 1) {
+          cell.className = "score-warning";
+        }
+        row.appendChild(cell);
+      });
+      table.appendChild(row);
+    });
+    section.appendChild(table);
+
+    const note = document.createElement("p");
+    note.textContent = "解释时还需要结合效度量表、明确的创伤暴露、侵入性症状、回避、情绪或认知变化、警觉性变化、持续时间和功能影响。";
+    section.appendChild(note);
+    document.body.appendChild(section);
+  }
+
+  // 只有通过 npm start 的本地服务器访问时才把结果写入磁盘；
+  // 在 GitHub Pages 等纯静态托管上没有后端，作答数据不离开浏览器，改为提供下载。
+  function has_local_result_server() {
+    return location.protocol === "http:" &&
+      (location.hostname === "127.0.0.1" || location.hostname === "localhost");
+  }
+
+  function append_result_download_link(container, label, fileName, mimeType, content) {
+    const link = document.createElement("a");
+    link.className = "my_button";
+    link.textContent = label;
+    link.download = fileName;
+    link.href = URL.createObjectURL(new Blob([content], { type: mimeType }));
+    container.appendChild(link);
+  }
+
+  function offer_result_downloads(result, status, leadText) {
+    const randomSuffix = Math.random().toString(16).slice(2, 10).padEnd(8, "0");
+    const record = MmpiResultReport.createRecord(result, randomSuffix);
+    status.className = "result-save-status is-success";
+    status.textContent = leadText;
+    status.appendChild(document.createElement("br"));
+    append_result_download_link(status, "下载 Markdown 报告", record.id + ".md",
+      "text/markdown;charset=utf-8", MmpiResultReport.renderMarkdown(record));
+    append_result_download_link(status, "下载 JSON 数据", record.id + ".json",
+      "application/json;charset=utf-8", JSON.stringify(record, null, 2) + "\n");
+  }
+
+  async function save_test_result(result) {
+    const status = document.getElementById("result-save-status");
+    const currentSequence = ++resultSaveSequence;
+
+    if (!has_local_result_server()) {
+      if (status) {
+        status.hidden = false;
+        offer_result_downloads(result, status,
+          "计分已在本浏览器中完成，作答数据没有上传到任何服务器。如需留存，请下载：");
+      }
+      return;
+    }
+
+    if (status) {
+      status.hidden = false;
+      status.className = "result-save-status is-saving";
+      status.textContent = "正在把测试结果保存到本地服务器……";
+    }
+
+    try {
+      const response = await fetch("/api/results", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(result)
+      });
+      const payload = await response.json().catch(function() { return {}; });
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || "服务器返回保存失败");
+      }
+      if (currentSequence !== resultSaveSequence || !status) { return; }
+      status.className = "result-save-status is-success";
+      status.textContent = "已保存到 " + payload.directory + "/" + payload.markdownFile +
+        "；同目录还保存了结构化JSON文件 " + payload.jsonFile + "。";
+    } catch (error) {
+      if (currentSequence !== resultSaveSequence || !status) { return; }
+      offer_result_downloads(result, status,
+        "本地服务器保存失败（" + error.message + "），可改为直接下载：");
+    }
+  }
   
   // Fill the answer array with radio button state and score
   function score_rb(form) {
@@ -449,7 +733,12 @@ function append_text(txt) {
         ans.push("?");
       }
     }
+    // 先发起本地保存，再运行原有同步计分与弹窗流程。
+    // 即使原结果渲染因极端/缺失答案弹出警告，保存请求也不会被阻断。
+    const testResult = build_test_result();
+    save_test_result(testResult);
     score();
+    append_ptsd_result_summary(testResult);
 
 
     /* 2023.11.16 尝试对undefined值做出警告 */
@@ -1384,8 +1673,20 @@ var resultArray = [
   ["TRT（负面治疗指标）", "", "", ""],
 ];
 
-// 这个地方没写好……但是可以正确运行。注意与tscoreArray的下标对应关系
-var damn = [3, 0, 4, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16];
+// 结果解释表与 tscoreArray 的下标对应关系。
+// Mf 在原始 scales 数据中按性别拆成两个条目：男性为 10，女性为 11。
+var resultScaleTscoreIndexes = [3, 0, 4, 6, 7, 8, 9, null, 12, 13, 14, 15, 16];
+
+function result_scale_tscore_index(resultIndex) {
+  if (resultIndex === 7) {
+    return gender === 0 ? 10 : 11;
+  }
+  return resultScaleTscoreIndexes[resultIndex];
+}
+
+function mf_result_note() {
+  return "当前仅显示按所选性别常模计算的原始分与T分。Mf反映量表编制年代的性别角色兴趣，不能单独用于判断性别认同、性取向或日常意义上的‘男性化/女性化’，本项目暂不提供分档解释。";
+}
 
 
 // 打表
@@ -1420,33 +1721,31 @@ function start_to_print_result(resultArray, tscoreArray){
   headerRow.appendChild(header2);
 
   // 创建数据行和单元格
-  // for (let i = 0; i < resultArray.length; i++) {
-    // 14 === 3 + 9 + 2(Mf)
   for (let i = 0; i < 13; i++) {
-    // if(i === 12 || i === 7){
-    if(i === 7){
-      // 懒得打Mf的表了...
-      continue;
-    }
+    const displayedTscore = tscoreArray[result_scale_tscore_index(i)];
 
     let row = document.createElement("tr");
     table.appendChild(row);
 
     let cell1 = document.createElement("td");
-    cell1.textContent = resultArray[i][0] + " : " + tscoreArray[damn[i]];
+    cell1.textContent = resultArray[i][0] + " : " +
+      (displayedTscore === undefined ? "过高或过低" : displayedTscore);
     cell1.style.padding = "8px";
     cell1.style.borderRight = "1px solid black";
     row.appendChild(cell1);
 
     let cell2 = document.createElement("td");
 
-    if(tscoreArray[damn[i]] >= resultArray[i][1]){
+    if(i === 7){
+      cell2.textContent = mf_result_note();
+    }
+    else if(displayedTscore >= resultArray[i][1]){
       cell2.textContent = resultArray[i][3];
     }
-    else if(tscoreArray[damn[i]] >= resultArray[i][2]){
+    else if(displayedTscore >= resultArray[i][2]){
       cell2.textContent = resultArray[i][4];
     }
-    else if(tscoreArray[damn[i]] < resultArray[i][2]){
+    else if(displayedTscore < resultArray[i][2]){
       cell2.textContent = resultArray[i][5];
     }
     else{
@@ -1487,14 +1786,8 @@ function start_to_print_result(resultArray, tscoreArray){
   headerRow2.appendChild(header4);
 
   // 创建数据行和单元格
-  // for (let i = 0; i < resultArray.length; i++) {
-    // 14 === 3 + 9 + 2(Mf)
   for (let i = 0; i < 13; i++) {
-    // if(i === 12 || i === 7){
-    if(i === 7){
-      // 懒得打Mf的表了...
-      continue;
-    }
+    const displayedTscore = tscoreArray[result_scale_tscore_index(i)];
 
     let row = document.createElement("tr");
     table2.appendChild(row);
@@ -1502,16 +1795,18 @@ function start_to_print_result(resultArray, tscoreArray){
     let cell1 = document.createElement("td");
     // 注意！如果原分数“合理”，则不做出-8修正。真他妈麻烦。
     let abnormal_flag;
-    if(tscoreArray[damn[i]] >= resultArray[i][1]){
+    // Mf 男女使用不同常模，且没有可靠依据支持套用项目原有的统一 -8 估算。
+    if(i !== 7 && displayedTscore >= resultArray[i][1]){
       abnormal_flag = true;
     }else{
       abnormal_flag = false;
     }
 
     if(abnormal_flag){
-      cell1.textContent = resultArray[i][0] + " : " + (tscoreArray[damn[i]] - 8);
+      cell1.textContent = resultArray[i][0] + " : " + (displayedTscore - 8);
     }else{
-      cell1.textContent = resultArray[i][0] + " : " + (tscoreArray[damn[i]]);
+      cell1.textContent = resultArray[i][0] + " : " +
+        (displayedTscore === undefined ? "过高或过低" : displayedTscore);
     }
     cell1.style.padding = "8px";
     cell1.style.borderRight = "1px solid black";
@@ -1524,27 +1819,30 @@ function start_to_print_result(resultArray, tscoreArray){
 
     let cell2 = document.createElement("td");
 
-    if(abnormal_flag){
-      if(tscoreArray[damn[i]] - 8 >= resultArray[i][1]){
+    if(i === 7){
+      cell2.textContent = mf_result_note() + " 本行不应用 -8 估算。";
+    }
+    else if(abnormal_flag){
+      if(displayedTscore - 8 >= resultArray[i][1]){
         cell2.textContent = resultArray[i][3];
       }
-      else if(tscoreArray[damn[i]] - 8 >= resultArray[i][2]){
+      else if(displayedTscore - 8 >= resultArray[i][2]){
         cell2.textContent = resultArray[i][4];
       }
-      else if(tscoreArray[damn[i]] - 8 < resultArray[i][2]){
+      else if(displayedTscore - 8 < resultArray[i][2]){
         cell2.textContent = resultArray[i][5];
       }
       else{
         cell2.textContent = "您的分数超出了量表范围。详情请见 github issue   （https://github.com/MMPI-CHN/MMPI-CHN.github.io/issues/3）"
       }
     }else{
-      if(tscoreArray[damn[i]] >= resultArray[i][1]){
+      if(displayedTscore >= resultArray[i][1]){
         cell2.textContent = resultArray[i][3];
       }
-      else if(tscoreArray[damn[i]] >= resultArray[i][2]){
+      else if(displayedTscore >= resultArray[i][2]){
         cell2.textContent = resultArray[i][4];
       }
-      else if(tscoreArray[damn[i]] < resultArray[i][2]){
+      else if(displayedTscore < resultArray[i][2]){
         cell2.textContent = resultArray[i][5];
       }
       else{
@@ -1562,7 +1860,7 @@ function start_to_print_result(resultArray, tscoreArray){
   var span = document.createElement('span');
   var span2 = document.createElement('span2');
   var span3 = document.createElement('span3')
-  var text = document.createTextNode('由于我们使用的是美国常模，因此最终算出的T分可能偏高。根据经验，我们对T分进行了-8的修正。'); 
+  var text = document.createTextNode('当前使用原项目内置常模表；原作者说明其可能基于美国常模。下表的-8仅是经验估算，不是中国常模换算，Mf不应用该估算。');
   var text2 = document.createTextNode('注意！结果仅供参考！');
   var text3 = document.createTextNode('详情请见 https://github.com/MMPI-CHN/MMPI-CHN.github.io/blob/main/%E5%85%B3%E4%BA%8E%E5%B8%B8%E6%A8%A1%E7%9A%84%E9%80%9A%E4%BF%97%E8%A7%A3%E9%87%8A.txt')
   span.appendChild(text);
